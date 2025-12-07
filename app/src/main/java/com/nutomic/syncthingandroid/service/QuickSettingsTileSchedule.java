@@ -26,29 +26,33 @@ public class QuickSettingsTileSchedule extends TileService implements ServiceCon
     private static final String TAG = "QuickSettingsTileSchedule";
     private static final boolean ENABLE_VERBOSE_LOG = false;
 
-    private static QuickSettingsTileSchedule mInstance;
     private int mTilesAvailableState = Tile.STATE_INACTIVE;
 
     private Context mContext;
     private SharedPreferences mPreferences; // Manually initialized - no injection needed
+
+    private final SharedPreferences.OnSharedPreferenceChangeListener mPrefListener = new SharedPreferences.OnSharedPreferenceChangeListener() {
+        @Override
+        public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String pref) {
+            if (pref == null || !pref.equals(Constants.PREF_BTNSTATE_FORCE_START_STOP)) return;
+            refreshTile();
+        }
+    };
     private SyncthingService mSyncthingService;
 
     public QuickSettingsTileSchedule() {
-        mInstance = this;
     }
 
-    public static void refresh() {
-        if (mInstance == null) {
-            return;
-        }
-        mInstance.refreshTile();
-    }
 
     @Override
     public void onDestroy() {
         LogV("onDestroy()");
         if (mSyncthingService != null) {
             mSyncthingService.unregisterOnServiceStateChangeListener(this);
+            mSyncthingService = null;
+        }
+        if (mPreferences != null) {
+            mPreferences.unregisterOnSharedPreferenceChangeListener(mPrefListener);
         }
         try {
             if (mContext != null) {
@@ -57,8 +61,6 @@ public class QuickSettingsTileSchedule extends TileService implements ServiceCon
         } catch (IllegalArgumentException | IllegalStateException e) {
             LogV("Service not bound or already unbound");
         }
-        mSyncthingService = null;
-        mInstance = null;
         super.onDestroy();
     }
 
@@ -68,6 +70,8 @@ public class QuickSettingsTileSchedule extends TileService implements ServiceCon
         if (getQsTile() != null) {
             mContext = getApplication().getApplicationContext();
             mPreferences = PreferenceManager.getDefaultSharedPreferences(mContext);
+            mPreferences.registerOnSharedPreferenceChangeListener(mPrefListener);
+
             try {
                 Intent bindIntent = new Intent(mContext, SyncthingService.class);
                 mContext.bindService(bindIntent, this, Context.BIND_AUTO_CREATE);
@@ -113,8 +117,7 @@ public class QuickSettingsTileSchedule extends TileService implements ServiceCon
         }
 
         // disable tile if app is not running, schedule is off, or syncthing is force-started/stopped
-        if (syncthingRunning && mPreferences.getBoolean(Constants.PREF_RUN_ON_TIME_SCHEDULE, false)
-                && mPreferences.getInt(Constants.PREF_BTNSTATE_FORCE_START_STOP, Constants.BTNSTATE_NO_FORCE_START_STOP) == Constants.BTNSTATE_NO_FORCE_START_STOP) {
+        if (syncthingRunning && mPreferences.getBoolean(Constants.PREF_RUN_ON_TIME_SCHEDULE, false) && mPreferences.getInt(Constants.PREF_BTNSTATE_FORCE_START_STOP, Constants.BTNSTATE_NO_FORCE_START_STOP) == Constants.BTNSTATE_NO_FORCE_START_STOP) {
             return false;
         }
 
@@ -140,20 +143,17 @@ public class QuickSettingsTileSchedule extends TileService implements ServiceCon
         if (tile == null) return;
         if (newState == tile.getState()) return;
 
-        Resources res = mContext.getResources();
-
         tile.setState(newState);
+
         String label;
+        Resources res = mContext.getResources();
         if (newState == Tile.STATE_INACTIVE || newState == Tile.STATE_ACTIVE) {
-            label = res.getString(
-                    R.string.qs_schedule_label_minutes,
-                    Integer.parseInt(mPreferences.getString(Constants.PREF_SYNC_DURATION_MINUTES, "5"))
-            );
+            label = res.getString(R.string.qs_schedule_label_minutes, Integer.parseInt(mPreferences.getString(Constants.PREF_SYNC_DURATION_MINUTES, "5")));
         } else {
-            label = mContext.getResources().getString(R.string.qs_schedule_disabled);
+            label = res.getString(R.string.qs_schedule_disabled);
         }
         tile.setLabel(label);
-        tile.setState(newState);
+
         tile.updateTile();
     }
 

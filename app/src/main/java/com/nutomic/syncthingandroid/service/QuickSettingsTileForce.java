@@ -77,8 +77,6 @@ public class QuickSettingsTileForce extends TileService {
         editor.putInt(Constants.PREF_BTNSTATE_FORCE_START_STOP, newState);
         editor.apply();
 
-        QuickSettingsTileSchedule.refresh();
-
         LocalBroadcastManager localBroadcastManager = LocalBroadcastManager.getInstance(mContext);
         Intent intent = new Intent(ACTION_UPDATE_SHOULDRUN_DECISION);
         localBroadcastManager.sendBroadcast(intent);
